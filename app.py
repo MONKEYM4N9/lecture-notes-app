@@ -9,7 +9,17 @@ from moviepy import VideoFileClip, AudioFileClip
 from imageio_ffmpeg import get_ffmpeg_exe
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Lecture-to-Notes Pro", page_icon="🎓", layout="centered")
+st.set_page_config(
+    page_title="Lecture to Notes AI | Free Student Study Tool", # <--- KEYWORDS HERE
+    page_icon="🎓",
+    layout="centered",
+    initial_sidebar_state="expanded",
+    menu_items={
+        'Get Help': 'https://twitter.com/yourhandle',
+        'Report a bug': "https://github.com/yourrepo/issues",
+        'About': "Turn video lectures into exam-ready notes using AI. Upload MP4, MP3, or PDF."
+    }
+)
 
 # --- CSS FOR PRETTY UI ---
 st.markdown("""
