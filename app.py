@@ -9,7 +9,7 @@ import subprocess
 import yt_dlp
 import markdown
 import json
-from xhtml2pdf import pisa
+from fpdf import FPDF  # <--- CHANGED: Using FPDF instead of xhtml2pdf
 from io import BytesIO
 from moviepy import VideoFileClip, AudioFileClip
 import imageio_ffmpeg
@@ -66,11 +66,21 @@ with st.sidebar:
 
 # --- HELPER FUNCTIONS ---
 def convert_markdown_to_pdf(markdown_text):
-    html_text = markdown.markdown(markdown_text)
-    styled_html = f"<html><body>{html_text}</body></html>"
-    result = BytesIO()
-    pisa.CreatePDF(styled_html, dest=result)
-    return result.getvalue()
+    """Converts Text to PDF using FPDF (No C++ dependencies)"""
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_font("Arial", size=12)
+    
+    # Simple cleanup to remove markdown symbols for cleaner PDF
+    clean_text = markdown_text.replace("# ", "").replace("## ", "").replace("**", "")
+    
+    # FPDF doesn't handle unicode (emojis) well by default, so we strip them or encode
+    for line in clean_text.split('\n'):
+        safe_line = line.encode('latin-1', 'replace').decode('latin-1')
+        pdf.multi_cell(0, 10, safe_line)
+        
+    return pdf.output(dest='S').encode('latin-1')
 
 def get_system_prompt(detail_level, context_type, part_info=""):
     if "Summary" in detail_level: return f"You are an expert Summarizer. {part_info} Create a CONCISE SUMMARY of this {context_type}."
@@ -114,9 +124,7 @@ def get_transcript(video_id):
 # --- DOWNLOADERS ---
 def download_audio_from_youtube(url):
     try:
-        # Smart FFmpeg detection for Cloud vs Local
         ffmpeg_loc = "ffmpeg" if shutil.which("ffmpeg") else os.path.abspath("ffmpeg.exe")
-        
         ydl_opts = {
             'format': 'bestaudio[ext=m4a]/bestaudio',
             'outtmpl': 'temp_yt_audio.%(ext)s',
@@ -130,7 +138,6 @@ def download_audio_from_youtube(url):
 def download_video_from_youtube(url):
     try:
         ffmpeg_loc = "ffmpeg" if shutil.which("ffmpeg") else os.path.abspath("ffmpeg.exe")
-        
         ydl_opts = {
             'format': 'best[ext=mp4][height<=720]', 
             'outtmpl': 'temp_yt_vid.%(ext)s', 
@@ -202,7 +209,6 @@ st.title("🎓 Lecture-to-Notes Pro")
 
 if not st.session_state["master_notes"]:
     st.write("Upload a file OR paste a YouTube link.")
-    # UPDATED: Added 3rd Tab
     tab_upload, tab_youtube, tab_echo = st.tabs(["📁 Upload File", "🔗 YouTube Link", "📘 Echo360 Guide"])
 
     with tab_upload:
@@ -241,31 +247,13 @@ if not st.session_state["master_notes"]:
                 finally:
                     if os.path.exists(path): os.unlink(path)
                     
-    # NEW: Echo360 Guide Tab
     with tab_echo:
         st.header("How to use Echo360 Recordings")
-        st.write("""
-        Echo360 videos are private, so we can't download them automatically. 
-        **You must download the file first, then upload it to the 'Upload File' tab.**
-        """)
-        
+        st.write("Echo360 videos are private. You must download the file first.")
         st.subheader("Option 1: The Official Way")
-        st.markdown("""
-        1. Go to your Echo360 Course page.
-        2. Find the lecture video in the list.
-        3. Click the **Green Video Icon** or the **Three Dots (...)**.
-        4. Select **Download Original**.
-        5. Upload the `.mp4` file to the **📁 Upload File** tab above.
-        """)
-        
+        st.markdown("1. Go to your Echo360 Course page.\n2. Click the **Green Video Icon**.\n3. Select **Download Original**.\n4. Upload the `.mp4` file to the **📁 Upload File** tab.")
         st.subheader("Option 2: If Download is Disabled")
-        st.markdown("""
-        If your lecturer has disabled the download button:
-        1. Install a Chrome Extension like **"Echo360 Downloader"**.
-        2. Go to the lecture page.
-        3. Click the extension icon to save the video.
-        4. Upload the file here.
-        """)
+        st.markdown("1. Install **'Echo360 Downloader'** Chrome Extension.\n2. Go to the lecture page.\n3. Click the extension icon to save the video.\n4. Upload the file here.")
 
 else:
     st.success("🎉 Notes Generated!")
