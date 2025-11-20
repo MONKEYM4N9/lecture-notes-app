@@ -4,3 +4,5 @@ moviepy
 imageio-ffmpeg
 yt-dlp
 youtube-transcript-api
+markdown
+xhtml2pdf

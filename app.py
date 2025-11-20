@@ -4,37 +4,53 @@ import tempfile
 import os
 import time
 import math
+import shutil
 import subprocess
 import yt_dlp
+import markdown
+import json
+from xhtml2pdf import pisa
+from io import BytesIO
 from moviepy import VideoFileClip, AudioFileClip
-from imageio_ffmpeg import get_ffmpeg_exe
+import imageio_ffmpeg
 from youtube_transcript_api import YouTubeTranscriptApi
 from urllib.parse import urlparse, parse_qs
 
 # --- PAGE CONFIGURATION ---
-st.set_page_config(page_title="Lecture-to-Notes Pro", page_icon="🎓", layout="centered")
+st.set_page_config(page_title="Lecture-to-Notes Pro", page_icon="🎓", layout="wide")
+
+# --- AUTO-SETUP FFmpeg ---
+def ensure_ffmpeg_exists():
+    current_folder = os.getcwd()
+    ffmpeg_local = os.path.join(current_folder, "ffmpeg.exe")
+    if not os.path.exists(ffmpeg_local):
+        try:
+            ffmpeg_src = imageio_ffmpeg.get_ffmpeg_exe()
+            shutil.copy(ffmpeg_src, ffmpeg_local)
+        except Exception as e:
+            print(f"FFmpeg setup warning: {e}")
+    return ffmpeg_local
+
+# Run setup and get the path
+FFMPEG_PATH = ensure_ffmpeg_exists()
 
 # --- CSS ---
 st.markdown("""
     <style>
-    .stButton>button {
-        width: 100%;
-        background-color: #FF4B4B;
-        color: white;
-        font-size: 20px;
-        padding: 10px;
-    }
+    .stButton>button { width: 100%; border-radius: 10px; height: 3em; }
+    .correct-ans { background-color: #d4edda; padding: 15px; border-radius: 10px; color: #155724; border: 1px solid #c3e6cb; margin-bottom: 10px; }
+    .wrong-ans { background-color: #f8d7da; padding: 15px; border-radius: 10px; color: #721c24; border: 1px solid #f5c6cb; margin-bottom: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
-if "master_notes" not in st.session_state:
-    st.session_state["master_notes"] = ""
+# --- SESSION STATE ---
+if "master_notes" not in st.session_state: st.session_state["master_notes"] = ""
+if "messages" not in st.session_state: st.session_state["messages"] = []
+if "quiz_data" not in st.session_state: st.session_state["quiz_data"] = None
 
 # --- SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Settings")
-    
-    # Check secrets
     if "GOOGLE_API_KEY" in st.secrets:
         api_key = st.secrets["GOOGLE_API_KEY"]
         st.success("✅ API Key Loaded")
@@ -43,121 +59,99 @@ with st.sidebar:
         
     st.markdown("---")
     st.header("📝 Note Style")
-    detail_level = st.radio(
-        "Choose Depth:",
-        ["Summary (Concise)", "Comprehensive (Standard)", "Exhaustive (Everything)"],
-        index=1
-    )
+    detail_level = st.radio("Choose Depth:", ["Summary (Concise)", "Comprehensive (Standard)", "Exhaustive (Everything)"], index=1)
     
-    if st.button("Clear All Notes"):
-        st.session_state["master_notes"] = ""
+    if st.button("Clear All Data"):
+        st.session_state.clear()
         st.rerun()
 
-# --- PROMPT GENERATOR ---
-def get_system_prompt(detail_level, context_type, part_info=""):
-    if "Summary" in detail_level:
-        return f"""
-        You are an expert Summarizer. {part_info}
-        The student wants a **CONCISE SUMMARY** of this {context_type}.
-        Output Structure:
-        1. **The Main Idea:** One paragraph explaining the core thesis.
-        2. **Top 3 Takeaways:** The most important points only.
-        3. **Key Terms:** A quick list of defined terms.
-        """
-    elif "Exhaustive" in detail_level:
-        return f"""
-        You are a dedicated Scribe. {part_info}
-        The student wants **EXHAUSTIVE, DEEP NOTES** of this {context_type}.
-        Output Structure:
-        1. **Minute-by-Minute Walkthrough:** Detailed chronological notes.
-        2. **All Arguments:** Explain the logic behind every point.
-        3. **All Examples:** Write down every example given.
-        4. **Visuals:** Describe every single graph, chart, or slide shown in the video.
-        """
-    else: 
-        return f"""
-        You are an expert Academic Tutor. {part_info}
-        The student wants **STANDARD STUDY NOTES** of this {context_type}.
-        Output Structure:
-        1. **Key Concepts:** Definitions and Explanations.
-        2. **Main Arguments:** The core logic.
-        3. **Visuals:** Describe important charts/diagrams shown on screen.
-        4. **Exam Predictions:** What is likely to be tested?
-        """
-
 # --- HELPER FUNCTIONS ---
+def convert_markdown_to_pdf(markdown_text):
+    html_text = markdown.markdown(markdown_text)
+    styled_html = f"<html><body>{html_text}</body></html>"
+    result = BytesIO()
+    pisa.CreatePDF(styled_html, dest=result)
+    return result.getvalue()
+
+def get_system_prompt(detail_level, context_type, part_info=""):
+    if "Summary" in detail_level: return f"You are an expert Summarizer. {part_info} Create a CONCISE SUMMARY of this {context_type}."
+    elif "Exhaustive" in detail_level: return f"You are a dedicated Scribe. {part_info} Create EXHAUSTIVE NOTES of this {context_type}."
+    else: return f"You are an expert Tutor. {part_info} Create STANDARD STUDY NOTES of this {context_type}."
+
+def generate_quiz(notes_text, api_key):
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel(model_name="gemini-2.5-flash")
+    prompt = f"""
+    Create 5 multiple choice questions based on these notes.
+    OUTPUT ONLY RAW JSON. NO MARKDOWN.
+    Structure: [ {{"question": "?", "options": ["A) x", "B) y"], "answer": "B) y"}} ]
+    NOTES: {notes_text[:15000]}
+    """
+    for attempt in range(3):
+        try:
+            response = model.generate_content(prompt)
+            text = response.text
+            start = text.find('[')
+            end = text.rfind(']') + 1
+            if start != -1 and end != -1: return json.loads(text[start:end])
+        except Exception: time.sleep(4); continue
+    st.error("Failed to generate quiz."); return None
+
+# --- MEDIA LOGIC ---
 def get_video_id(url):
-    """Extracts video ID from YouTube URL"""
-    query = urlparse(url)
-    if query.hostname == 'youtu.be':
-        return query.path[1:]
-    if query.hostname in ('www.youtube.com', 'youtube.com'):
-        if query.path == '/watch':
-            p = parse_qs(query.query)
-            return p['v'][0]
-    return None
+    try:
+        query = urlparse(url)
+        if query.hostname == 'youtu.be': return query.path[1:]
+        if query.hostname in ('www.youtube.com', 'youtube.com'):
+            if query.path == '/watch': return parse_qs(query.query)['v'][0]
+    except: return None
 
 def get_transcript(video_id):
-    """Fetches text transcript instantly"""
     try:
         transcript_list = YouTubeTranscriptApi.get_transcript(video_id)
-        full_text = ""
-        for line in transcript_list:
-            full_text += f"{line['text']} "
-        return full_text
-    except Exception as e:
-        return None
+        return " ".join([line['text'] for line in transcript_list])
+    except: return None
 
-def download_video_from_youtube(url):
-    """Downloads VIDEO (MP4) from YouTube to a temp file"""
+# --- DOWNLOADERS (FIXED PATHS) ---
+def download_audio_from_youtube(url):
     try:
-        # UPDATED: We now download 'best' video but limit height to 720p
-        # This ensures we get Visuals but file size doesn't explode.
+        # Using os.path.abspath to ensure it finds the local file
+        ffmpeg_local = os.path.abspath("ffmpeg.exe")
         ydl_opts = {
-            'format': 'best[ext=mp4][height<=720]/best[ext=mp4]',
-            'outtmpl': 'temp_yt_download.%(ext)s',
+            'format': 'bestaudio[ext=m4a]/bestaudio',
+            'outtmpl': 'temp_yt_audio.%(ext)s',
+            'ffmpeg_location': ffmpeg_local,
             'quiet': True
         }
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            ydl.download([url])
-        
-        return "temp_yt_download.mp4"
-    except Exception as e:
-        st.error(f"YouTube Download Error: {e}")
-        return None
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl: ydl.download([url])
+        return "temp_yt_audio.m4a"
+    except Exception as e: st.error(f"Audio DL Error: {e}"); return None
+
+def download_video_from_youtube(url):
+    try:
+        ffmpeg_local = os.path.abspath("ffmpeg.exe")
+        ydl_opts = {
+            'format': 'best[ext=mp4][height<=720]', 
+            'outtmpl': 'temp_yt_vid.%(ext)s', 
+            'ffmpeg_location': ffmpeg_local,
+            'quiet': True
+        }
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl: ydl.download([url])
+        return "temp_yt_vid.mp4"
+    except Exception as e: st.error(f"Video DL Error: {e}"); return None
 
 def get_media_duration(file_path):
     try:
-        ext = os.path.splitext(file_path)[1].lower()
-        if ext in ['.mp3', '.wav', '.m4a']:
-            clip = AudioFileClip(file_path)
-        else:
-            clip = VideoFileClip(file_path)
-        duration = clip.duration
-        clip.close()
-        return duration
-    except:
-        return 0
+        if file_path.endswith('.m4a') or file_path.endswith('.mp3'): clip = AudioFileClip(file_path)
+        else: clip = VideoFileClip(file_path)
+        duration = clip.duration; clip.close(); return duration
+    except: return 0
 
 def cut_media_fast(input_path, output_path, start_time, end_time):
-    ffmpeg_exe = get_ffmpeg_exe()
+    # Use local ffmpeg.exe
+    ffmpeg_exe = "ffmpeg.exe" if os.path.exists("ffmpeg.exe") else imageio_ffmpeg.get_ffmpeg_exe()
     cmd = [ffmpeg_exe, "-y", "-i", input_path, "-ss", str(start_time), "-to", str(end_time), "-c", "copy", output_path]
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-# --- CORE PROCESSORS ---
-def process_text_content(text_data, api_key, detail_level, source_name):
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(model_name="gemini-2.5-pro")
-    
-    with st.spinner(f'🧠 Analyzing {source_name} ({detail_level})...'):
-        try:
-            system_prompt = get_system_prompt(detail_level, "transcript text", "")
-            response = model.generate_content([system_prompt, text_data])
-            st.session_state["master_notes"] += f"\n\n# 📄 Notes from {source_name}\n"
-            st.session_state["master_notes"] += response.text
-            st.balloons()
-        except Exception as e:
-            st.error(f"Error: {e}")
 
 def split_and_process_media(original_file_path, api_key, detail_level):
     genai.configure(api_key=api_key)
@@ -165,116 +159,122 @@ def split_and_process_media(original_file_path, api_key, detail_level):
     duration_sec = get_media_duration(original_file_path)
     if duration_sec == 0: return
     
-    chunk_size_sec = 2400 
-    total_chunks = math.ceil(duration_sec / chunk_size_sec)
-    
-    st.warning(f"🍿 Media is {duration_sec/60:.0f} mins long. Processing style: {detail_level}.\n\nThis will take a few minutes... Time for a Reels break! 📱")
+    chunk_size_sec = 2400; total_chunks = math.ceil(duration_sec / chunk_size_sec)
+    st.warning(f"🍿 Media is {duration_sec/60:.0f} mins long. Style: {detail_level}. Time for a Reels break! 📱")
     progress_bar = st.progress(0)
     
     for i in range(total_chunks):
-        start_time = i * chunk_size_sec
-        end_time = min((i + 1) * chunk_size_sec, duration_sec)
-        
-        with st.status(f"Processing Part {i+1} of {total_chunks}...", expanded=True) as status:
+        start_time = i * chunk_size_sec; end_time = min((i + 1) * chunk_size_sec, duration_sec)
+        with st.status(f"Processing Part {i+1}/{total_chunks}...", expanded=True) as status:
             ext = os.path.splitext(original_file_path)[1]
             chunk_path = f"temp_chunk_{i}{ext}"
-            
-            status.write("✂️ Cutting segment...")
             cut_media_fast(original_file_path, chunk_path, start_time, end_time)
-            
-            status.write("📤 Uploading to AI...")
             try:
                 video_file = genai.upload_file(path=chunk_path)
-                while video_file.state.name == "PROCESSING":
-                    time.sleep(2)
-                    video_file = genai.get_file(video_file.name)
-                
-                if video_file.state.name == "FAILED":
-                    st.error(f"Part {i+1} failed.")
-                    continue
-
+                while video_file.state.name == "PROCESSING": time.sleep(2); video_file = genai.get_file(video_file.name)
                 status.write(f"🧠 Analyzing ({detail_level})...")
-                ext_check = os.path.splitext(original_file_path)[1].lower()
-                context_type = "audio recording" if ext_check in ['.mp3', '.wav', '.m4a'] else "video lecture"
-                part_info = f"You are analyzing Part {i+1} of a {total_chunks}-part lecture."
-                system_prompt = get_system_prompt(detail_level, context_type, part_info)
+                
+                is_audio = ext.lower() in ['.mp3', '.wav', '.m4a']
+                context_type = "audio" if is_audio else "video"
+                system_prompt = get_system_prompt(detail_level, context_type, f"Part {i+1}/{total_chunks}")
                 
                 response = model.generate_content([video_file, system_prompt])
-                st.session_state["master_notes"] += f"\n\n# 📼 Part {i+1} ({start_time//60}m - {end_time//60}m)\n"
-                st.session_state["master_notes"] += response.text
+                st.session_state["master_notes"] += f"\n\n# 📼 Part {i+1}\n{response.text}"
                 status.update(label=f"✅ Part {i+1} Done!", state="complete", expanded=False)
-            except Exception as e:
-                st.error(f"Error: {e}")
-            finally:
+            except Exception as e: st.error(f"Error: {e}")
+            finally: 
                 if os.path.exists(chunk_path): os.remove(chunk_path)
         progress_bar.progress((i + 1) / total_chunks)
 
+def process_text_content(text_data, api_key, detail_level, source_name):
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel(model_name="gemini-2.5-flash")
+    with st.spinner(f'🧠 Analyzing...'):
+        try:
+            system_prompt = get_system_prompt(detail_level, "transcript", "")
+            response = model.generate_content([system_prompt, text_data])
+            st.session_state["master_notes"] += f"\n\n# 📄 Notes from {source_name}\n{response.text}"
+            st.balloons()
+        except Exception as e: st.error(f"Error: {e}")
+
 # --- MAIN UI ---
 st.title("🎓 Lecture-to-Notes Pro")
-st.write("Upload a file OR paste a YouTube link.")
 
-tab_upload, tab_youtube = st.tabs(["📁 Upload File", "🔗 YouTube Link"])
+if not st.session_state["master_notes"]:
+    st.write("Upload a file OR paste a YouTube link.")
+    tab_upload, tab_youtube = st.tabs(["📁 Upload File", "🔗 YouTube Link"])
 
-with tab_upload:
-    uploaded_file = st.file_uploader("Upload File", type=["mp4", "mov", "avi", "mkv", "mp3", "wav", "m4a", "txt", "md", "srt", "vtt"])
-    if st.button("Process Uploaded File 🚀"):
-        if not api_key: st.error("⚠️ Please enter API Key in sidebar.")
-        elif uploaded_file:
+    with tab_upload:
+        uploaded_file = st.file_uploader("Upload File", type=["mp4", "mov", "mp3", "m4a", "txt", "md"])
+        if st.button("Process Uploaded File 🚀") and uploaded_file and api_key:
             file_ext = os.path.splitext(uploaded_file.name)[1].lower()
-            if file_ext in ['.txt', '.md', '.srt', '.vtt']:
-                string_data = uploaded_file.read().decode("utf-8")
-                process_text_content(string_data, api_key, detail_level, "Uploaded Text")
+            if file_ext in ['.txt', '.md']:
+                process_text_content(uploaded_file.read().decode("utf-8"), api_key, detail_level, "Text File"); st.rerun()
             else:
                 with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
-                    tmp_file.write(uploaded_file.read())
-                    original_path = tmp_file.name
-                try:
-                    split_and_process_media(original_path, api_key, detail_level)
-                    st.balloons()
-                finally:
+                    tmp_file.write(uploaded_file.read()); original_path = tmp_file.name
+                try: split_and_process_media(original_path, api_key, detail_level); st.rerun()
+                finally: 
                     if os.path.exists(original_path): os.unlink(original_path)
 
-with tab_youtube:
-    youtube_url = st.text_input("Paste YouTube URL here")
+    with tab_youtube:
+        youtube_url = st.text_input("Paste YouTube URL")
+        c1, c2, c3 = st.columns(3)
+        if c1.button("⚡ Speed Run (Text)") and api_key and youtube_url:
+             vid_id = get_video_id(youtube_url)
+             transcript = get_transcript(vid_id)
+             if transcript: process_text_content(transcript, api_key, detail_level, "Transcript"); st.rerun()
+             else: st.error("No transcript.")
+        
+        if c2.button("🎧 Audio Mode") and api_key and youtube_url:
+            with st.spinner("Downloading Audio..."): path = download_audio_from_youtube(youtube_url)
+            if path: 
+                try: split_and_process_media(path, api_key, detail_level); st.rerun()
+                finally: 
+                    if os.path.exists(path): os.unlink(path)
+
+        if c3.button("🧠 Video Mode") and api_key and youtube_url:
+            with st.spinner("Downloading Video..."): path = download_video_from_youtube(youtube_url)
+            if path:
+                try: split_and_process_media(path, api_key, detail_level); st.rerun()
+                finally:
+                    if os.path.exists(path): os.unlink(path)
+
+else:
+    st.success("🎉 Notes Generated!")
+    t1, t2, t3 = st.tabs(["📖 Notes", "💬 Chat", "📝 Quiz"])
+    with t1:
+        st.markdown(st.session_state["master_notes"])
+        if st.button("📄 PDF"):
+            pdf = convert_markdown_to_pdf(st.session_state["master_notes"])
+            st.download_button("Download PDF", pdf, "notes.pdf", "application/pdf")
     
-    col1, col2 = st.columns(2)
-    
-    # BUTTON 1: SPEED RUN (TRANSCRIPT / AUDIO CONTENT)
-    with col1:
-        if st.button("⚡ Speed Run (Audio Content)"):
-            if not api_key: st.error("⚠️ Please enter API Key.")
-            elif youtube_url:
-                video_id = get_video_id(youtube_url)
-                if not video_id:
-                    st.error("Invalid YouTube URL.")
+    with t2:
+        for m in st.session_state["messages"]: st.chat_message(m["role"]).markdown(m["content"])
+        if p := st.chat_input("Ask..."):
+            st.session_state["messages"].append({"role":"user","content":p}); st.chat_message("user").markdown(p)
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel("gemini-2.5-flash")
+            res = model.generate_content(f"Context:\n{st.session_state['master_notes']}\nUser: {p}")
+            st.chat_message("assistant").markdown(res.text)
+            st.session_state["messages"].append({"role":"assistant","content":res.text})
+
+    with t3:
+        if st.button("New Quiz"):
+            with st.spinner("Generating..."):
+                q = generate_quiz(st.session_state["master_notes"], api_key)
+                if q: st.session_state["quiz_data"] = q; st.rerun()
+        if st.session_state["quiz_data"]:
+            for i, q in enumerate(st.session_state["quiz_data"]):
+                st.markdown(f"**{i+1}. {q['question']}**")
+                k = f"q_{i}"
+                if k not in st.session_state:
+                    cols = st.columns(2)
+                    for idx, opt in enumerate(q['options']):
+                        if cols[idx%2].button(opt, key=f"btn_{i}_{idx}"):
+                            st.session_state[k] = True; st.session_state[f"user_{i}"] = opt; st.rerun()
                 else:
-                    transcript_text = get_transcript(video_id)
-                    if transcript_text:
-                        process_text_content(transcript_text, api_key, detail_level, "YouTube Transcript")
-                    else:
-                        st.error("No transcript available. Try Deep Analysis.")
-
-    # BUTTON 2: DEEP ANALYSIS (VIDEO / VISUALS)
-    with col2:
-        if st.button("🧠 Deep Analysis (Video & Visuals)"):
-            if not api_key: st.error("⚠️ Please enter API Key.")
-            elif youtube_url:
-                with st.spinner("Downloading Video... (This takes time for visuals!)"):
-                    # UPDATED: Now calls the video downloader, not audio
-                    downloaded_path = download_video_from_youtube(youtube_url)
-                
-                if downloaded_path:
-                    try:
-                        split_and_process_media(downloaded_path, api_key, detail_level)
-                        st.balloons()
-                    finally:
-                        if os.path.exists(downloaded_path): os.unlink(downloaded_path)
-
-# --- RESULTS ---
-if st.session_state["master_notes"]:
-    st.markdown("---")
-    st.success("🎉 Processing Complete!")
-    tab1, tab2 = st.tabs(["📖 Read Notes", "📋 Copy Raw Text"])
-    with tab1: st.markdown(st.session_state["master_notes"])
-    with tab2: st.text_area("Copy Code", value=st.session_state["master_notes"], height=400)
-    st.download_button("📥 Download Notes", st.session_state["master_notes"], "Notes.md")
+                    u = st.session_state[f"user_{i}"]; c = q['answer']
+                    if u==c: st.markdown(f"<div class='correct-ans'>✅ Correct! ({u})</div>", unsafe_allow_html=True)
+                    else: st.markdown(f"<div class='wrong-ans'>❌ Wrong. You picked {u}.<br>✅ Answer: {c}</div>", unsafe_allow_html=True)
+                st.markdown("---")
