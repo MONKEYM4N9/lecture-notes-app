@@ -262,7 +262,7 @@ st.title("🎓 Lecture-to-Notes Pro")
 st.caption("Your personal AI study companion. Upload lectures, get notes, take quizzes.")
 
 if not st.session_state["master_notes"]:
-    st.info("👈 Start by entering your API Key in the sidebar.")
+    # REMOVED: st.info("Start by entering...") block is gone.
     
     tab_upload, tab_youtube, tab_echo = st.tabs(["📁 Upload File", "🔗 YouTube Link", "📘 Echo360 Guide"])
 
@@ -302,7 +302,7 @@ if not st.session_state["master_notes"]:
                 finally:
                     if os.path.exists(path): os.unlink(path)
                     
-    # RESTORED: Detailed Echo360 Guide
+    # ECHO360 GUIDE (DETAILED)
     with tab_echo:
         st.header("How to use Echo360 Recordings")
         st.write("Echo360 videos are private. You must download the file first.")
