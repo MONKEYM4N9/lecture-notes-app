@@ -9,7 +9,7 @@ import subprocess
 import yt_dlp
 import markdown
 import json
-from xhtml2pdf import pisa
+from fpdf import FPDF
 from io import BytesIO
 from moviepy import VideoFileClip, AudioFileClip
 import imageio_ffmpeg
@@ -67,11 +67,23 @@ with st.sidebar:
 
 # --- HELPER FUNCTIONS ---
 def convert_markdown_to_pdf(markdown_text):
-    html_text = markdown.markdown(markdown_text)
-    styled_html = f"<html><body>{html_text}</body></html>"
-    result = BytesIO()
-    pisa.CreatePDF(styled_html, dest=result)
-    return result.getvalue()
+    """Converts Text to PDF using FPDF (No C++ dependencies)"""
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.set_font("Arial", size=12)
+    
+    # Simple cleanup to remove markdown symbols for cleaner PDF
+    clean_text = markdown_text.replace("# ", "").replace("## ", "").replace("**", "")
+    
+    # FPDF doesn't handle unicode (emojis) well by default, so we strip them or encode
+    # Ideally, we just write line by line
+    for line in clean_text.split('\n'):
+        # Encode to latin-1 to avoid crashes with weird characters
+        safe_line = line.encode('latin-1', 'replace').decode('latin-1')
+        pdf.multi_cell(0, 10, safe_line)
+        
+    return pdf.output(dest='S').encode('latin-1')
 
 def get_system_prompt(detail_level, context_type, part_info=""):
     if "Summary" in detail_level: return f"You are an expert Summarizer. {part_info} Create a CONCISE SUMMARY of this {context_type}."
