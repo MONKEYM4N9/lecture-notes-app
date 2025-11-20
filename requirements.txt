@@ -2,3 +2,5 @@ streamlit
 google-generativeai
 moviepy
 imageio-ffmpeg
+yt-dlp
+youtube-transcript-api
