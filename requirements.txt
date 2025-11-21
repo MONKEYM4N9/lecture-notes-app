@@ -5,4 +5,4 @@ imageio-ffmpeg
 yt-dlp
 youtube-transcript-api
 markdown
-fpdf
+fpdf2
