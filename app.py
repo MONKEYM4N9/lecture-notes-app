@@ -9,7 +9,6 @@ import subprocess
 import yt_dlp
 import markdown
 import json
-import urllib.request
 from fpdf import FPDF
 from io import BytesIO
 from moviepy import VideoFileClip, AudioFileClip
@@ -111,6 +110,31 @@ st.markdown("""
         background-color: #E94057;
         color: white;
     }
+    
+    /* ADVERTISEMENT STYLING */
+    .ad-card {
+        background-color: #1E1E1E;
+        padding: 15px;
+        border-radius: 10px;
+        border: 1px solid #333;
+        text-align: center;
+        margin-bottom: 20px;
+        transition: transform 0.2s;
+    }
+    .ad-card:hover {
+        transform: scale(1.02);
+        border-color: #E94057;
+    }
+    .ad-btn {
+        margin-top: 10px;
+        background-color: #4b6cb7;
+        color: white;
+        padding: 5px 10px;
+        border-radius: 5px;
+        font-size: 12px;
+        font-weight: bold;
+        display: inline-block;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -120,26 +144,70 @@ if "messages" not in st.session_state: st.session_state["messages"] = []
 if "quiz_data" not in st.session_state: st.session_state["quiz_data"] = None
 if "mindmap_code" not in st.session_state: st.session_state["mindmap_code"] = None
 
-# --- SIDEBAR ---
+# --- ADVERTISEMENT ENGINE ---
+def render_sidebar_ads():
+    """Displays your Affiliate Links"""
+    st.sidebar.markdown("---")
+    st.sidebar.caption("✨ STUDENT DEALS")
+    
+    # AMAZON LINK
+    st.sidebar.markdown("""
+    <a href="https://amzn.to/483S2zn" target="_blank" style="text-decoration: none; color: inherit;">
+        <div class="ad-card">
+            <div style="font-size: 30px;">🎧</div>
+            <div style="font-weight: bold; margin-top: 5px; color: white;">Apple AirPods 4</div>
+            <div style="font-size: 12px; color: #aaa; margin-top:5px;">Active Noise Cancellation. Perfect for lectures.</div>
+            <div class="ad-btn">Check Price</div>
+        </div>
+    </a>
+    """, unsafe_allow_html=True)
+
+def render_footer_ad():
+    """Displays a banner at the bottom"""
+    st.markdown("""
+    <br><br>
+    <a href="https://www.coursera.org/" target="_blank" style="text-decoration: none;">
+        <div style="background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%); padding: 25px; border-radius: 15px; text-align: center; color: white; margin-top: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.3);">
+            <span style="font-weight: bold; font-size: 20px;">🚀 Built with Python</span><br>
+            <div style="margin-top: 8px; font-size: 14px; opacity: 0.9;">Want to build your own AI apps? Start learning today.</div>
+            <button style="margin-top: 15px; background-color: white; color: #1e3c72; border: none; padding: 10px 20px; border-radius: 25px; font-weight: bold; cursor: pointer; transition: transform 0.2s;">Start Coding</button>
+        </div>
+    </a>
+    <br><br>
+    """, unsafe_allow_html=True)
+
+# --- SIDEBAR (CLEANED UP) ---
 with st.sidebar:
-    st.image("https://cdn-icons-png.flaticon.com/512/4712/4712009.png", width=50)
-    st.title("Settings")
+    # 1. TOP: Buy Me A Coffee
+    st.markdown("""
+    <a href="https://buymeacoffee.com/lecturetonotes" target="_blank">
+        <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 45px !important;width: 160px !important;" >
+    </a>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # 2. MIDDLE: Note Style (Main Control)
+    st.write("### 🎨 Note Style")
+    detail_level = st.radio("Choose Depth:", ["Summary (Concise)", "Comprehensive (Standard)", "Exhaustive (Everything)"], index=1)
+    
+    st.markdown("---")
+    
+    # 3. BOTTOM: Admin Stuff (Moved Down)
     if "GOOGLE_API_KEY" in st.secrets:
         api_key = st.secrets["GOOGLE_API_KEY"]
         st.success("✅ API Key Connected")
     else:
         api_key = st.text_input("🔑 Enter API Key", type="password")
         
-    st.markdown("---")
-    st.write("### 🎨 Note Style")
-    detail_level = st.radio("Choose Depth:", ["Summary (Concise)", "Comprehensive (Standard)", "Exhaustive (Everything)"], index=1)
-    
-    st.markdown("---")
     if st.button("🗑️ Clear All Data"):
         st.session_state.clear()
         st.rerun()
+        
+    # 4. ADS (Very Bottom)
+    render_sidebar_ads()
 
-# --- PDF ENGINE ---
+# --- PDF ENGINE (FAIL-SAFE HELVETICA VERSION) ---
 class ModernPDF(FPDF):
     def header(self):
         self.set_font('Helvetica', 'B', 20)
@@ -247,35 +315,18 @@ def generate_quiz(notes_text, api_key):
         except Exception: time.sleep(4); continue
     st.error("Failed to generate quiz."); return None
 
-# --- MIND MAP GENERATOR (UPDATED: COLORS + 6 WORDS) ---
 def generate_mindmap(notes_text, api_key):
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel(model_name="gemini-2.5-flash")
-    
     prompt = f"""
     Create a Graphviz DOT code representation of these notes.
-    
-    CRITICAL FORMATTING INSTRUCTIONS:
-    1. Start with: digraph G {{ graph [rankdir=LR, splines=ortho]; 
-       node [shape=box, style="filled", fontname="Arial"];
-       edge [color="#555555"];
-    
-    2. COLOR RULES (MANDATORY):
-       - Root Node: fillcolor="#FFD700" (Gold)
-       - Level 1 Branches: fillcolor="#D1C4E9" (Light Purple)
-       - Level 2 Branches: fillcolor="#B3E5FC" (Light Blue)
-       - Level 3/Details: fillcolor="#C8E6C9" (Light Green)
-    
-    3. CONTENT RULES:
-       - Max 6 words per label.
-       - Use meaningful labels, not just numbers.
-    
-    4. OUTPUT ONLY THE RAW CODE inside dot tags.
-    
-    NOTES:
-    {notes_text[:15000]}
+    CRITICAL:
+    1. Start with: digraph G {{ graph [rankdir=LR, splines=ortho]; node [shape=box, style="filled", fontname="Arial"]; edge [color="#555555"];
+    2. COLOR RULES: Root="#FFD700", L1="#D1C4E9", L2="#B3E5FC", L3="#C8E6C9".
+    3. Max 6 words per label.
+    4. OUTPUT ONLY RAW CODE inside dot tags.
+    NOTES: {notes_text[:15000]}
     """
-    
     try:
         response = model.generate_content(prompt)
         text = response.text
@@ -466,3 +517,6 @@ else:
         
         if st.session_state["mindmap_code"]:
             st.graphviz_chart(st.session_state["mindmap_code"])
+    
+    # RENDER FOOTER AD
+    render_footer_ad()
