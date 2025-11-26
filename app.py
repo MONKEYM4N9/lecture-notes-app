@@ -20,15 +20,14 @@ import graphviz
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="Lecture-to-Notes Pro", 
+    page_title="LecturePro", 
     page_icon="🎓", 
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 
 # --- SESSION STATE SETUP ---
-if "page" not in st.session_state:
-    st.session_state["page"] = "landing"
+if "page" not in st.session_state: st.session_state["page"] = "landing"
 if "master_notes" not in st.session_state: st.session_state["master_notes"] = ""
 if "messages" not in st.session_state: st.session_state["messages"] = []
 if "quiz_data" not in st.session_state: st.session_state["quiz_data"] = None
@@ -52,103 +51,131 @@ FFMPEG_PATH = ensure_ffmpeg_exists()
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+    
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
-        color: #E0E0E0;
+        color: #31333F; 
     }
-    .stApp {
-        background-color: #0E1117;
+    
+    /* WIDER CONTAINER & TOP PADDING FIX */
+    .block-container {
+        padding-top: 6rem; /* Increased to prevent cutting off top content */
+        padding-bottom: 2rem;
+        max-width: 95rem;
     }
-    /* SIDEBAR */
-    section[data-testid="stSidebar"] {
-        background-color: #262730;
-        border-right: 1px solid #333333;
+    
+    /* V2 BADGE */
+    .v2-badge {
+        background-color: #F3E8FF;
+        color: #6B21A8;
+        padding: 5px 15px;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 12px;
+        display: inline-block;
+        margin-bottom: 20px;
+        border: 1px solid #E9D5FF;
     }
-    /* BUTTONS */
-    .stButton>button {
-        background: linear-gradient(90deg, #8A2387 0%, #E94057 100%);
-        color: white;
-        border: none;
-        border-radius: 12px;
-        height: 3.5em;
-        font-weight: 600;
-        transition: all 0.3s ease;
-        box-shadow: 0 4px 15px rgba(233, 64, 87, 0.3);
-    }
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(233, 64, 87, 0.5);
-    }
-    /* LANDING PAGE SPECIFIC */
-    .hero-header {
-        font-size: 60px;
+
+    /* HEADER STYLES */
+    .main-header {
+        font-size: 50px;
         font-weight: 800;
-        background: -webkit-linear-gradient(0deg, #8A2387, #E94057, #F27121);
+        text-align: center;
+        margin-bottom: 0px;
+        color: #1a1a1a;
+    }
+    .highlight-pink {
+        background: -webkit-linear-gradient(0deg, #D946EF, #E94057);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        text-align: center;
-        margin-bottom: 10px;
     }
-    .hero-sub {
-        font-size: 20px;
-        color: #b0b0b0;
+    .sub-header {
+        font-size: 18px;
+        color: #666;
         text-align: center;
         margin-bottom: 40px;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
     }
-    .feature-card {
-        background-color: #1E1E1E;
-        padding: 20px;
-        border-radius: 15px;
-        border: 1px solid #333;
+    
+    /* UPLOAD BOX STYLING */
+    .upload-area-text {
         text-align: center;
+        margin-bottom: -10px;
+        font-weight: 700;
+        font-size: 20px;
     }
+    .upload-subtext {
+        text-align: center;
+        color: #888;
+        font-size: 14px;
+        margin-bottom: 20px;
+    }
+    
+    /* ECHO360 BOX */
+    .echo-box {
+        background-color: #F0F8FF;
+        border: 1px solid #cce5ff;
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 30px;
+        color: #004085;
+    }
+    
+    /* SIDEBAR ELEMENTS */
+    .sidebar-logo {
+        font-size: 24px;
+        font-weight: 700;
+        margin-bottom: 20px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    
+    /* --- BUTTON STYLING --- */
+    
+    /* Standard Buttons */
+    div.stButton > button:first-child {
+        border-radius: 8px;
+        font-weight: 600;
+        border: 1px solid #E2E8F0;
+        background-color: #FFFFFF;
+        color: #1E293B;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        transition: all 0.2s;
+        min-height: 55px;
+        height: 100%;
+    }
+    
+    div.stButton > button:first-child:hover {
+        border-color: #D946EF;
+        color: #D946EF;
+        background-color: #FDF4FF;
+    }
+    
+    /* Primary Button Override (Full Video - Red) */
+    button[kind="primary"] {
+        background-color: #E94057 !important;
+        color: white !important;
+        border: none !important;
+        box-shadow: 0 4px 6px -1px rgba(233, 64, 87, 0.5) !important;
+    }
+    
+    button[kind="primary"]:hover {
+        background-color: #D63349 !important;
+        box-shadow: 0 10px 15px -3px rgba(233, 64, 87, 0.6) !important;
+    }
+
     </style>
     """, unsafe_allow_html=True)
 
-# --- LANDING PAGE ENGINE ---
-def render_landing_page():
-    st.markdown('<div class="hero-header">Lecture-to-Notes Pro</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-sub">The Ultimate AI Study Companion for Australian Students.</div>', unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        if st.button("🚀 Launch App (Free)", use_container_width=True):
-            st.session_state["page"] = "app"
-            st.rerun()
-            
-    st.markdown("<br><br>", unsafe_allow_html=True)
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown("""
-        <div class="feature-card">
-            <h3>🎥 Universal Input</h3>
-            <p>Works with YouTube links, MP3s, and Echo360 recordings.</p>
-        </div>
-        """, unsafe_allow_html=True)
-    with c2:
-        st.markdown("""
-        <div class="feature-card">
-            <h3>🧠 Visual Mind Maps</h3>
-            <p>Turn complex topics into colorful, easy-to-read diagrams.</p>
-        </div>
-        """, unsafe_allow_html=True)
-    with c3:
-        st.markdown("""
-        <div class="feature-card">
-            <h3>📝 Exam-Ready Notes</h3>
-            <p>Get summaries, quizzes, and flashcards in seconds.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<br><br><br>", unsafe_allow_html=True)
-    st.markdown("<div style='text-align: center; color: #666;'>Built with ❤️ in Perth, WA</div>", unsafe_allow_html=True)
-
-# --- HELPER FUNCTIONS ---
+# --- LOGIC FUNCTIONS (Hidden for brevity, same as before) ---
 class ModernPDF(FPDF):
     def header(self):
         self.set_font('Helvetica', 'B', 20); self.set_text_color(44, 62, 80); self.cell(0, 10, 'Lecture Notes', 0, 1, 'L')
-        self.set_font('Helvetica', 'I', 10); self.set_text_color(127, 140, 141); self.cell(0, 10, 'Generated by Lecture-to-Notes Pro', 0, 0, 'R')
+        self.set_font('Helvetica', 'I', 10); self.set_text_color(127, 140, 141); self.cell(0, 10, 'Generated by LecturePro', 0, 0, 'R')
         self.ln(12); self.set_draw_color(233, 64, 87); self.set_line_width(1.5); self.line(10, 32, 200, 32); self.ln(10)
     def footer(self):
         self.set_y(-15); self.set_font('Helvetica', 'I', 8); self.set_text_color(150, 150, 150); self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
@@ -200,7 +227,6 @@ def get_system_prompt(detail_level, context_type, part_info="", custom_focus="")
     else: return base + f"Create STANDARD STUDY NOTES of this {context_type}."
 
 def generate_quiz(notes_text, api_key):
-    # REVERTED TO 2.5-flash
     genai.configure(api_key=api_key); model = genai.GenerativeModel(model_name="gemini-2.5-flash")
     prompt = f"Create 5 multiple choice questions. OUTPUT ONLY RAW JSON. Structure: [ {{\"question\": \"?\", \"options\": [\"A) x\", \"B) y\"], \"answer\": \"B) y\"}} ]. NOTES: {notes_text[:15000]}"
     for attempt in range(3):
@@ -212,7 +238,6 @@ def generate_quiz(notes_text, api_key):
     st.error("Quiz failed."); return None
 
 def generate_mindmap(notes_text, api_key):
-    # REVERTED TO 2.5-flash
     genai.configure(api_key=api_key); model = genai.GenerativeModel(model_name="gemini-2.5-flash")
     prompt = f"""
     Create Graphviz DOT code.
@@ -270,277 +295,216 @@ def cut_media_fast(input_path, output_path, start_time, end_time):
     cmd = [ffmpeg_exe, "-y", "-i", input_path, "-ss", str(start_time), "-to", str(end_time), "-c", "copy", output_path]
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-# --- MASTER EDITOR FUNCTION ---
 def run_master_editor(all_chunk_notes, api_key, detail_level, custom_focus):
-    """
-    Takes a list of raw notes from video chunks and fuses them into one cohesive document.
-    """
     genai.configure(api_key=api_key)
-    # Using 2.5-pro for high-intelligence synthesis as requested
     model = genai.GenerativeModel(model_name="gemini-2.5-pro") 
-    
     combined_raw_text = "\n\n".join(all_chunk_notes)
-    
     system_prompt = f"""
-    You are the "Master Editor" for a high-end academic study tool.
-    
-    I will provide you with a series of "Raw Notes" generated from sequential segments of a single lecture.
-    Your goal is to MERGE these fragments into ONE cohesive, flowing study document.
-    
-    CONTEXT SETTINGS:
-    - Detail Level: {detail_level}
-    - Custom User Focus: {custom_focus}
-    
-    INSTRUCTIONS:
-    1. REMOVE redundancies (e.g. if Part 1 ends with a topic and Part 2 repeats the intro to it).
-    2. DELETE any meta-headers like "# 📼 Part 1" or "End of transcript".
-    3. FIX the flow. The document should read as if it was written by one person listening to the whole lecture at once.
-    4. STRUCTURE:
-       - Title & Brief Intro
-       - ⚡ TL;DR (Core concept, difficulty, exam probability)
-       - The Main Content (Organized by topic, not by timestamp)
-       - Key Takeaways / Glossary
-       
-    RAW NOTES TO MERGE:
-    {combined_raw_text}
+    You are the "Master Editor". MERGE these notes into one cohesive document.
+    Detail: {detail_level}. Focus: {custom_focus}.
+    RAW NOTES: {combined_raw_text}
     """
     try:
         response = model.generate_content(system_prompt)
         return response.text
-    except Exception as e:
-        return f"Error in Master Editor: {e}\n\n{combined_raw_text}"
+    except Exception as e: return f"Error: {e}"
 
-# --- SPLIT AND PROCESS ENGINE (UPDATED) ---
 def split_and_process_media(original_file_path, api_key, detail_level, custom_focus):
     genai.configure(api_key=api_key)
-    # Reverted to 2.5-pro for the chunks as per your request
     model = genai.GenerativeModel(model_name="gemini-2.5-pro") 
-    
     duration_sec = get_media_duration(original_file_path)
     if duration_sec == 0: return
-
-    chunk_size_sec = 2400 # kept at 2400 as per your original file
+    chunk_size_sec = 2400 
     total_chunks = math.ceil(duration_sec / chunk_size_sec)
     
-    st.info(f"Popcorn time! 🍿 Processing {total_chunks} segments before the Master Editor takes over.")
+    st.info(f"Processing {total_chunks} segments...")
     progress_bar = st.progress(0)
-    
-    # 1. CREATE A LIST TO STORE CHUNK OUTPUTS
     raw_notes_accumulator = [] 
 
     for i in range(total_chunks):
         start_time = i * chunk_size_sec
         end_time = min((i + 1) * chunk_size_sec, duration_sec)
-        
-        with st.status(f"Listening to Part {i+1}/{total_chunks}...", expanded=True) as status:
+        with st.status(f"Processing Part {i+1}...", expanded=True) as status:
             ext = os.path.splitext(original_file_path)[1]
             chunk_path = f"temp_chunk_{i}{ext}"
-            
-            # Cut file
             cut_media_fast(original_file_path, chunk_path, start_time, end_time)
-            
             try:
-                # Upload and Process Chunk
                 video_file = genai.upload_file(path=chunk_path)
-                while video_file.state.name == "PROCESSING":
-                    time.sleep(2)
-                    video_file = genai.get_file(video_file.name)
-                
-                status.write(f"📝 Drafting notes for Part {i+1}...")
-                
-                # Context prompt for the chunk
+                while video_file.state.name == "PROCESSING": time.sleep(2); video_file = genai.get_file(video_file.name)
                 is_audio = ext.lower() in ['.mp3', '.wav', '.m4a']
-                context_type = "audio" if is_audio else "video"
-                
-                # Note: We tell it to be detailed here so the Master Editor has enough data
-                system_prompt = get_system_prompt("Exhaustive", context_type, f"Part {i+1}", custom_focus)
-                
-                response = model.generate_content([video_file, system_prompt])
-                
-                # APPEND TO LIST INSTEAD OF MASTER STRING
-                raw_notes_accumulator.append(f"--- PART {i+1} RAW DATA ---\n{response.text}")
-                
-                status.update(label=f"✅ Part {i+1} Drafted", state="complete", expanded=False)
-                
-            except Exception as e:
-                st.error(f"Error on Part {i+1}: {e}")
-            finally:
-                if os.path.exists(chunk_path):
-                    os.remove(chunk_path)
-        
+                sys_prompt = get_system_prompt("Exhaustive", "audio" if is_audio else "video", f"Part {i+1}", custom_focus)
+                response = model.generate_content([video_file, sys_prompt])
+                raw_notes_accumulator.append(response.text)
+                status.update(label="Done", state="complete")
+            except Exception as e: st.error(str(e))
+            finally: 
+                if os.path.exists(chunk_path): os.remove(chunk_path)
         progress_bar.progress((i + 1) / total_chunks)
 
-    # --- THE MASTER EDITOR STEP ---
-    with st.spinner("👨‍🏫 Master Editor is merging and polishing your notes..."):
-        final_polished_notes = run_master_editor(raw_notes_accumulator, api_key, detail_level, custom_focus)
-        
-        # Save the FINAL result to the session state
-        st.session_state["master_notes"] = final_polished_notes
-        st.balloons()
+    final_polished_notes = run_master_editor(raw_notes_accumulator, api_key, detail_level, custom_focus)
+    st.session_state["master_notes"] = final_polished_notes
+    st.balloons()
+    st.rerun()
 
 def process_text_content(text_data, api_key, detail_level, source_name, custom_focus):
-    # REVERTED TO 2.5-flash
     genai.configure(api_key=api_key); model = genai.GenerativeModel(model_name="gemini-2.5-flash")
-    with st.spinner(f'🧠 Analyzing...'):
+    with st.spinner(f'Analyzing...'):
         try:
             system_prompt = get_system_prompt(detail_level, "transcript", "", custom_focus)
             response = model.generate_content([system_prompt, text_data])
             st.session_state["master_notes"] += f"\n\n# 📄 Notes from {source_name}\n{response.text}"
-            st.balloons()
+            st.rerun()
         except Exception as e: st.error(f"Error: {e}")
 
-# --- MAIN APP UI RENDER ---
-def render_main_app():
+# --- MAIN RENDER ---
+def render_app():
     # --- SIDEBAR ---
     with st.sidebar:
-        st.image("https://cdn-icons-png.flaticon.com/512/4712/4712009.png", width=50)
-        
+        st.markdown('<div class="sidebar-logo">🎓 LecturePro</div>', unsafe_allow_html=True)
+        # Full width Buy Me A Coffee
         st.markdown("""
-        <a href="https://buymeacoffee.com/lecturetonotes" target="_blank">
-            <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="height: 45px !important;width: 160px !important;" >
+        <a href="https://buymeacoffee.com/lecturetonotes" target="_blank" style="display: block; width: 100%;">
+            <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" style="width: 100%; height: auto; border-radius: 8px; margin-bottom: 20px;">
         </a>
         """, unsafe_allow_html=True)
         
-        st.markdown("---")
+        st.caption("NOTE STYLE")
+        detail_level = st.radio("Style", ["Summary (Concise)", "Comprehensive", "Exhaustive"], index=1, label_visibility="collapsed")
         
-        st.write("### 🎨 Note Style")
-        detail_level = st.radio("Choose Depth:", ["Summary (Concise)", "Comprehensive (Standard)", "Exhaustive (Everything)"], index=1)
-        
-        st.write("### 🎯 Custom Focus")
-        custom_focus = st.text_area("Tell the AI what to focus on:", placeholder="e.g. 'Focus on dates', 'Explain like I'm 5'")
+        st.caption("CUSTOM FOCUS")
+        custom_focus = st.text_area("Focus", placeholder="e.g. 'Focus on dates and names' or 'Explain like I'm 5'", label_visibility="collapsed")
         
         st.markdown("---")
         
-        st.sidebar.caption("✨ STUDENT DEALS")
-        st.sidebar.markdown("""
-        <a href="https://amzn.to/483S2zn" target="_blank" style="text-decoration: none; color: inherit;">
-            <div style="background-color: #1E1E1E; padding: 15px; border-radius: 10px; border: 1px solid #333; text-align: center; margin-bottom: 20px; transition: transform 0.2s;">
-                <div style="font-size: 30px;">🎧</div>
-                <div style="font-weight: bold; margin-top: 5px; color: white;">Apple AirPods 4</div>
-                <div style="font-size: 12px; color: #aaa; margin-top:5px;">Active Noise Cancellation. Perfect for lectures.</div>
-                <div style="margin-top: 10px; background-color: #4b6cb7; color: white; padding: 5px 10px; border-radius: 5px; font-size: 12px; font-weight: bold; display: inline-block;">Check Price</div>
-            </div>
-        </a>
+        # Student Deal Card (Apple AirPods 4)
+        st.markdown("""
+        <div style="background-color: #0F172A; padding: 15px; border-radius: 10px; color: white; text-align: center; margin-bottom: 20px;">
+            <div style="font-size: 24px; margin-bottom: 5px;">🎧</div>
+            <div style="font-weight: bold; font-size: 14px;">Apple AirPods 4</div>
+            <div style="font-size: 11px; color: #94A3B8; margin: 5px 0 10px 0;">Active Noise Cancellation. Perfect for lectures.</div>
+            <a href="https://amzn.to/483S2zn" target="_blank" style="background-color: white; color: black; padding: 5px 15px; border-radius: 4px; text-decoration: none; font-weight: bold; font-size: 12px; display: inline-block;">Check Price</a>
+        </div>
         """, unsafe_allow_html=True)
         
-        st.markdown("---")
-        
-        st.title("Settings")
+        st.caption("API CONFIGURATION")
         if "GOOGLE_API_KEY" in st.secrets:
             api_key = st.secrets["GOOGLE_API_KEY"]
             st.success("✅ API Key Connected")
         else:
-            api_key = st.text_input("🔑 Enter API Key", type="password")
+            api_key = st.text_input("API Key", type="password", placeholder="Enter Gemini API Key", label_visibility="collapsed")
             
-        if st.button("🗑️ Clear All Data"):
-            st.session_state.clear()
-            st.rerun()
+        if st.button("Reset App"): st.session_state.clear(); st.rerun()
 
-    # --- MAIN CONTENT ---
-    st.title("🎓 Lecture-to-Notes Pro")
-    st.caption("Your personal AI study companion. Upload lectures, get notes, take quizzes.")
-
-    if not st.session_state["master_notes"]:
-        tab_upload, tab_youtube, tab_echo = st.tabs(["📁 Upload File", "🔗 YouTube Link", "📘 Echo360 Guide"])
-        
-        with tab_upload:
-            st.write("### Upload Lecture File")
-            uploaded_file = st.file_uploader("Drag and drop audio/video here", type=["mp4", "mov", "mp3", "m4a", "txt", "md"])
-            if st.button("Process Uploaded File 🚀") and uploaded_file and api_key:
-                file_ext = os.path.splitext(uploaded_file.name)[1].lower()
-                if file_ext in ['.txt', '.md']:
-                    process_text_content(uploaded_file.read().decode("utf-8"), api_key, detail_level, "Text File", custom_focus); st.rerun()
-                else:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
-                        tmp_file.write(uploaded_file.read()); original_path = tmp_file.name
-                    try: split_and_process_media(original_path, api_key, detail_level, custom_focus); st.rerun()
-                    finally: 
-                        if os.path.exists(original_path): os.unlink(original_path)
-
-        with tab_youtube:
-            st.write("### Paste YouTube URL")
-            youtube_url = st.text_input("Link:", placeholder="https://youtube.com/watch?v=...")
-            c1, c2, c3 = st.columns(3)
-            if c1.button("⚡ Speed Run (Text)") and api_key and youtube_url:
-                 vid_id = get_video_id(youtube_url); transcript = get_transcript(vid_id)
-                 if transcript: process_text_content(transcript, api_key, detail_level, "Transcript", custom_focus); st.rerun()
-                 else: st.error("No transcript.")
-            if c2.button("🎧 Audio Mode") and api_key and youtube_url:
-                with st.spinner("Downloading Audio..."): path = download_audio_from_youtube(youtube_url)
-                if path: 
-                    try: split_and_process_media(path, api_key, detail_level, custom_focus); st.rerun()
-                    finally: 
-                        if os.path.exists(path): os.unlink(path)
-            if c3.button("🧠 Video Mode") and api_key and youtube_url:
-                with st.spinner("Downloading Video..."): path = download_video_from_youtube(youtube_url)
-                if path:
-                    try: split_and_process_media(path, api_key, detail_level, custom_focus); st.rerun()
-                    finally:
-                        if os.path.exists(path): os.unlink(path)
-                        
-        with tab_echo:
-            st.header("How to use Echo360 Recordings")
-            st.write("Echo360 videos are private. You must download the file first.")
-            st.subheader("Option 1: The Official Way")
-            st.markdown("1. Go to your Echo360 Course page.\n2. Click the **Green Video Icon**.\n3. Select **Download Original**.\n4. Upload the `.mp4` file to the **📁 Upload File** tab.")
-            st.subheader("Option 2: If Download is Disabled")
-            st.markdown("1. Install **'Echo360 Downloader'** Chrome Extension.\n2. Go to the lecture page.\n3. Click the extension icon to save the video.\n4. Upload the file here.")
-
-    else:
-        st.success("🎉 Processing Complete! Your study materials are ready.")
+    # --- MAIN CONTENT OR RESULT ---
+    if st.session_state["master_notes"]:
+        # RESULT VIEW
+        st.success("🎉 Notes Generated!")
         t1, t2, t3, t4 = st.tabs(["📖 Notes", "💬 Chat", "📝 Quiz", "🧠 Mind Map"])
         
         with t1:
             st.markdown(st.session_state["master_notes"])
-            if st.button("📄 Generate PDF"):
-                pdf = convert_markdown_to_pdf(st.session_state["master_notes"])
-                st.download_button("Download PDF", pdf, "notes.pdf", "application/pdf")
-        
+            pdf = convert_markdown_to_pdf(st.session_state["master_notes"])
+            st.download_button("Download PDF", pdf, "notes.pdf", "application/pdf")
+            if st.button("Start Over"): st.session_state.clear(); st.rerun()
+            
         with t2:
             for m in st.session_state["messages"]: st.chat_message(m["role"]).markdown(m["content"])
-            if p := st.chat_input("Ask questions about your lecture..."):
+            if p := st.chat_input("Ask about your lecture..."):
                 st.session_state["messages"].append({"role":"user","content":p}); st.chat_message("user").markdown(p)
-                genai.configure(api_key=api_key)
-                # REVERTED TO 2.5-flash
-                model = genai.GenerativeModel("gemini-2.5-flash")
-                res = model.generate_content(f"Context:\n{st.session_state['master_notes']}\nUser: {p}")
-                st.chat_message("assistant").markdown(res.text)
-                st.session_state["messages"].append({"role":"assistant","content":res.text})
-        
+                genai.configure(api_key=api_key); model = genai.GenerativeModel("gemini-2.5-flash")
+                res = model.generate_content(f"Context: {st.session_state['master_notes']}\nUser: {p}")
+                st.chat_message("assistant").markdown(res.text); st.session_state["messages"].append({"role":"assistant","content":res.text})
+                
         with t3:
-            if st.button("Generate New Quiz 🎲"):
-                with st.spinner("Creating Questions..."):
-                    q = generate_quiz(st.session_state["master_notes"], api_key)
-                    if q: st.session_state["quiz_data"] = q; st.rerun()
+            if st.button("Generate Quiz"): 
+                q = generate_quiz(st.session_state["master_notes"], api_key)
+                if q: st.session_state["quiz_data"] = q; st.rerun()
             if st.session_state["quiz_data"]:
                 for i, q in enumerate(st.session_state["quiz_data"]):
                     st.markdown(f"**{i+1}. {q['question']}**")
-                    k = f"q_{i}"
-                    if k not in st.session_state:
-                        cols = st.columns(2)
-                        for idx, opt in enumerate(q['options']):
-                            if cols[idx%2].button(opt, key=f"btn_{i}_{idx}"):
-                                st.session_state[k] = True; st.session_state[f"user_{i}"] = opt; st.rerun()
-                    else:
-                        u = st.session_state[f"user_{i}"]; c = q['answer']
-                        if u==c: st.markdown(f"<div class='correct-ans'>✅ Correct! ({u})</div>", unsafe_allow_html=True)
-                        else: st.markdown(f"<div class='wrong-ans'>❌ Wrong. You picked {u}.<br>✅ Answer: {c}</div>", unsafe_allow_html=True)
-                    st.markdown("---")
-                    
+                    cols = st.columns(2)
+                    for idx, opt in enumerate(q['options']):
+                        if cols[idx%2].button(opt, key=f"q{i}{idx}"):
+                             if opt == q['answer']: st.success("Correct!")
+                             else: st.error(f"Wrong. Answer: {q['answer']}")
+                             
         with t4:
-            st.write("### 🧠 Visual Concept Map")
-            if st.button("Generate Mind Map ✨"):
-                with st.spinner("Drawing connections..."):
-                    mm_code = generate_mindmap(st.session_state["master_notes"], api_key)
-                    if mm_code:
-                        st.session_state["mindmap_code"] = mm_code
-                        st.rerun()
-            
-            if st.session_state["mindmap_code"]:
-                st.graphviz_chart(st.session_state["mindmap_code"])
+            if st.button("Generate Map"):
+                c = generate_mindmap(st.session_state["master_notes"], api_key)
+                if c: st.session_state["mindmap_code"] = c; st.rerun()
+            if st.session_state["mindmap_code"]: st.graphviz_chart(st.session_state["mindmap_code"])
 
-# --- CONTROLLER ---
-if st.session_state["page"] == "landing":
-    render_landing_page()
-else:
-    render_main_app()
+    else:
+        # LANDING PAGE VIEW
+        col1, col2, col3 = st.columns([1, 6, 1])
+        with col2:
+            st.markdown('<div style="text-align: center;"><span class="v2-badge">🚀 V2.0: AUTO-SPLICING ENGINE ACTIVE</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="main-header">Turn Lectures into <span class="highlight-pink">Super Notes</span></div>', unsafe_allow_html=True)
+            st.markdown('<div class="sub-header">Upload any video, audio, or YouTube link. Our AI breaks it down, analyzes every second, and creates the ultimate study guide.</div>', unsafe_allow_html=True)
+            
+            # 1. FILE UPLOAD BOX
+            with st.container():
+                # Added margin-top to separate slightly from header
+                st.markdown("""
+                <div style="border: 2px dashed #E0E7FF; border-radius: 15px; padding: 30px; text-align: center; background-color: white; margin-bottom: 20px; margin-top: 20px;">
+                    <div style="font-size: 40px; margin-bottom: 10px; background-color: #EEF2FF; width: 80px; height: 80px; line-height: 80px; border-radius: 50%; margin-left: auto; margin-right: auto; color: #4F46E5;">📤</div>
+                    <div style="font-weight: 700; font-size: 18px; color: #1e293b;">Drop your lecture file</div>
+                    <div style="color: #64748b; font-size: 14px; margin-bottom: 15px;">MP4, MP3, MOV, M4A (Max 2GB - Auto-Spliced)</div>
+                </div>
+                """, unsafe_allow_html=True)
+                uploaded_file = st.file_uploader("Upload", type=["mp4", "mov", "mp3", "m4a", "txt", "md"], label_visibility="collapsed")
+                
+                if uploaded_file and api_key:
+                    if st.button("Process Uploaded File 🚀", use_container_width=True):
+                        file_ext = os.path.splitext(uploaded_file.name)[1].lower()
+                        if file_ext in ['.txt', '.md']: process_text_content(uploaded_file.read().decode("utf-8"), api_key, detail_level, "Text", custom_focus)
+                        else:
+                            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp: tmp.write(uploaded_file.read()); path = tmp.name
+                            try: split_and_process_media(path, api_key, detail_level, custom_focus)
+                            finally: os.unlink(path)
+
+            # 2. YOUTUBE SECTION
+            st.markdown("---")
+            c_input, c_btn1, c_btn2, c_btn3 = st.columns([3, 1, 1, 1])
+            with c_input:
+                yt_url = st.text_input("YouTube URL", placeholder="Paste YouTube URL here...", label_visibility="collapsed")
+            
+            # Action Buttons
+            if c_btn1.button("⚡ Speed Run"):
+                if api_key and yt_url:
+                    vid_id = get_video_id(yt_url); trans = get_transcript(vid_id)
+                    if trans: process_text_content(trans, api_key, detail_level, "YouTube", custom_focus)
+                    else: st.error("No transcript found.")
+            
+            if c_btn2.button("🎧 Audio"):
+                if api_key and yt_url:
+                    path = download_audio_from_youtube(yt_url)
+                    if path: split_and_process_media(path, api_key, detail_level, custom_focus)
+            
+            if c_btn3.button("📹 Full Video", type="primary"):
+                 if api_key and yt_url:
+                    path = download_video_from_youtube(yt_url)
+                    if path: split_and_process_media(path, api_key, detail_level, custom_focus)
+
+            # 3. ECHO360 GUIDE
+            st.markdown("""
+            <div class="echo-box">
+                <div style="font-weight: bold; margin-bottom: 10px;">ℹ️ How to use Echo360 Recordings</div>
+                <div style="display: flex; gap: 20px;">
+                    <div style="flex: 1;">
+                        <b>Option 1: Official Download</b><br>
+                        1. Go to your Echo360 Course page.<br>
+                        2. Click the green video icon.<br>
+                        3. Select "Download Original".
+                    </div>
+                    <div style="flex: 1;">
+                        <b>Option 2: Extension</b><br>
+                        1. Install "Echo360 Downloader".<br>
+                        2. Go to the lecture page.<br>
+                        3. Click extension icon to save.
+                    </div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+render_app()
